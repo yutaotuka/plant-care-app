@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midori — 植物ケア管理</title>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;600&family=Noto+Sans+JP:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --green-50: #f0f7f0; --green-100: #d6ecda; --green-200: #aed6b4;
+  --green-400: #5aab69; --green-600: #2e7d3e; --green-800: #1a4a25;
+  --brown-50: #faf6f0; --brown-100: #ede3d5; --brown-400: #a0785a;
+  --amber-50: #fdf8ee; --amber-400: #d4a017; --amber-600: #9a6e00;
+  --red-400: #d45a5a; --red-600: #9a3030;
+  --bg: #faf9f6; --surface: #ffffff; --surface-2: #f5f3ee;
+  --border: rgba(60,40,20,0.1); --border-strong: rgba(60,40,20,0.2);
+  --text: #2a1f12; --text-muted: #7a6a58; --text-light: #a89880;
+  --radius: 14px; --radius-sm: 8px;
+  --shadow: 0 2px 16px rgba(40,25,10,0.08);
+  --shadow-md: 0 4px 24px rgba(40,25,10,0.12);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+/* Auth screen */
+.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; background: var(--bg); }
+.auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2.5rem; width: 100%; max-width: 380px; box-shadow: var(--shadow-md); }
+.auth-logo { font-family: 'Shippori Mincho', serif; font-size: 28px; font-weight: 600; color: var(--green-600); text-align: center; margin-bottom: 4px; }
+.auth-tagline { text-align: center; font-size: 13px; color: var(--text-muted); margin-bottom: 2rem; }
+.auth-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+.auth-tab { flex: 1; padding: 8px; background: none; border: none; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; color: var(--text-muted); border-bottom: 2px solid transparent; }
+.auth-tab.active { color: var(--green-600); border-bottom-color: var(--green-400); font-weight: 500; }
+.form-group { margin-bottom: 1rem; }
+.form-label { font-size: 13px; color: var(--text-muted); margin-bottom: 5px; display: block; font-weight: 500; }
+input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], select, textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); font-size: 14px; font-family: 'Noto Sans JP', sans-serif;
+  background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--green-400); }
+textarea { resize: vertical; min-height: 70px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.error-msg { color: var(--red-600); font-size: 13px; margin-top: 8px; padding: 8px 12px; background: #fff5f5; border-radius: var(--radius-sm); }
+.success-msg { color: var(--green-600); font-size: 13px; margin-top: 8px; padding: 8px 12px; background: var(--green-50); border-radius: var(--radius-sm); }
+
+/* App layout */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 1.5rem 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; }
+.logo { font-family: 'Shippori Mincho', serif; font-size: 22px; font-weight: 600; color: var(--green-600); padding: 0 1.5rem 1.5rem; border-bottom: 1px solid var(--border); letter-spacing: 0.05em; }
+.logo span { font-size: 12px; display: block; color: var(--text-muted); font-weight: 400; font-family: 'Noto Sans JP', sans-serif; margin-top: 2px; }
+.nav { padding: 1rem 0; flex: 1; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 1.5rem; cursor: pointer; font-size: 13.5px; color: var(--text-muted); transition: all 0.15s; border-left: 3px solid transparent; }
+.nav-item:hover { color: var(--text); background: var(--surface-2); }
+.nav-item.active { color: var(--green-600); background: var(--green-50); border-left-color: var(--green-400); font-weight: 500; }
+.nav-icon { font-size: 16px; width: 20px; text-align: center; }
+.nav-bottom { padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
+.user-info { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.main { margin-left: 220px; flex: 1; padding: 2rem; max-width: calc(100vw - 220px); }
+
+/* Buttons */
+.btn { padding: 9px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; font-family: 'Noto Sans JP', sans-serif; }
+.btn-primary { background: var(--green-600); color: #fff; }
+.btn-primary:hover { background: var(--green-800); }
+.btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
+.btn-secondary:hover { background: var(--surface-2); }
+.btn-danger { background: #fff0f0; color: var(--red-600); border: 1px solid rgba(180,60,60,0.2); }
+.btn-danger:hover { background: #ffe0e0; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Stats */
+.stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 2rem; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem; box-shadow: var(--shadow); }
+.stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.stat-value { font-size: 26px; font-weight: 500; font-family: 'Shippori Mincho', serif; }
+.stat-value.red { color: var(--red-400); }
+.stat-value.amber { color: var(--amber-400); }
+.stat-value.green { color: var(--green-400); }
+
+/* Page */
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
+.page-title { font-family: 'Shippori Mincho', serif; font-size: 26px; font-weight: 600; }
+.page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+/* Plant grid */
+.plant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.plant-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); cursor: pointer; transition: box-shadow 0.2s, transform 0.2s; }
+.plant-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.plant-card.urgent { border-color: rgba(212,90,90,0.5); }
+.plant-card.due-today { border-color: rgba(212,160,23,0.5); }
+.plant-photo { height: 140px; background: var(--green-50); display: flex; align-items: center; justify-content: center; font-size: 56px; position: relative; overflow: hidden; }
+.plant-photo img { width: 100%; height: 100%; object-fit: cover; }
+.status-badge { position: absolute; top: 8px; right: 8px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+.badge-ok { background: var(--green-100); color: var(--green-600); }
+.badge-soon { background: var(--amber-50); color: var(--amber-600); border: 1px solid rgba(212,160,23,0.3); }
+.badge-late { background: #ffe8e8; color: var(--red-600); }
+.badge-today { background: var(--amber-50); color: var(--amber-600); }
+.plant-body { padding: 1rem; }
+.plant-name { font-size: 15px; font-weight: 500; margin-bottom: 2px; }
+.plant-species { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; font-style: italic; }
+.plant-stats { display: flex; gap: 12px; font-size: 12px; color: var(--text-light); margin-bottom: 10px; }
+.plant-actions { display: flex; gap: 6px; }
+.plant-actions .btn { flex: 1; text-align: center; }
+
+/* Care items */
+.care-list { display: flex; flex-direction: column; gap: 8px; }
+.care-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem; }
+.care-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.care-info { flex: 1; }
+.care-title { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+.care-meta { font-size: 12px; color: var(--text-muted); }
+.care-date { font-size: 12px; color: var(--text-light); text-align: right; white-space: nowrap; }
+
+/* Timeline */
+.timeline { display: flex; flex-direction: column; gap: 6px; }
+.timeline-day-label { font-size: 12px; font-weight: 500; color: var(--text-muted); padding: 10px 0 6px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.timeline-task { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; margin-bottom: 4px; }
+.timeline-task.overdue { background: #fff5f5; border-color: rgba(212,90,90,0.3); }
+.timeline-task-info { flex: 1; }
+.timeline-task-name { font-weight: 500; }
+.timeline-task-type { font-size: 11px; color: var(--text-muted); }
+
+/* Detail */
+.detail-header { display: flex; gap: 1.5rem; margin-bottom: 2rem; align-items: flex-start; }
+.detail-photo { width: 140px; height: 140px; border-radius: var(--radius); overflow: hidden; background: var(--green-50); display: flex; align-items: center; justify-content: center; font-size: 60px; flex-shrink: 0; }
+.detail-photo img { width: 100%; height: 100%; object-fit: cover; }
+.detail-name { font-family: 'Shippori Mincho', serif; font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+.detail-species { font-size: 14px; color: var(--text-muted); font-style: italic; margin-bottom: 10px; }
+.detail-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.chip { padding: 4px 12px; border-radius: 20px; font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); }
+.care-action-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+.care-action-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; cursor: pointer; text-align: center; transition: all 0.15s; }
+.care-action-btn:hover { background: var(--surface-2); transform: translateY(-1px); }
+.care-action-btn .icon { font-size: 24px; margin-bottom: 6px; }
+.care-action-btn .label { font-size: 12px; color: var(--text-muted); }
+
+/* Tabs */
+.tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+.tab-btn { padding: 9px 18px; background: none; border: none; cursor: pointer; font-size: 13.5px; color: var(--text-muted); border-bottom: 2px solid transparent; font-family: 'Noto Sans JP', sans-serif; transition: all 0.15s; }
+.tab-btn.active { color: var(--green-600); border-bottom-color: var(--green-400); font-weight: 500; }
+
+/* Modal */
+.modal-bg { position: fixed; inset: 0; background: rgba(20,10,5,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+.modal { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-md); width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+.modal-header { padding: 1.5rem 1.5rem 0; display: flex; justify-content: space-between; align-items: center; }
+.modal-title { font-family: 'Shippori Mincho', serif; font-size: 20px; font-weight: 600; }
+.modal-close { background: none; border: none; cursor: pointer; font-size: 20px; color: var(--text-muted); padding: 4px; }
+.modal-body { padding: 1.25rem 1.5rem; }
+.modal-footer { padding: 1rem 1.5rem 1.5rem; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--border); }
+
+/* Icon picker */
+.icon-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.icon-btn { width: 42px; height: 42px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface-2); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.icon-btn.selected { border-color: var(--green-400); background: var(--green-50); }
+
+/* Photo upload */
+.photo-upload { border: 2px dashed var(--border-strong); border-radius: var(--radius); padding: 1.5rem; text-align: center; cursor: pointer; transition: border-color 0.15s; color: var(--text-muted); }
+.photo-upload:hover { border-color: var(--green-400); color: var(--green-600); }
+
+/* Alert */
+.alert { padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
+.alert-warn { background: var(--amber-50); border: 1px solid rgba(212,160,23,0.3); color: var(--amber-600); }
+.alert-info { background: var(--green-50); border: 1px solid rgba(90,171,105,0.3); color: var(--green-600); }
+
+/* Toggle */
+.notif-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.toggle { position: relative; width: 44px; height: 24px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(--border-strong); border-radius: 24px; cursor: pointer; transition: 0.2s; }
+.toggle-slider:before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+.toggle input:checked + .toggle-slider { background: var(--green-400); }
+.toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+/* Loading */
+.loading { display: flex; align-items: center; justify-content: center; padding: 3rem; color: var(--text-muted); gap: 10px; font-size: 14px; }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--green-400); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty { text-align: center; padding: 3rem; color: var(--text-muted); }
+.empty-icon { font-size: 48px; margin-bottom: 1rem; display: block; }
+.empty-title { font-family: 'Shippori Mincho', serif; font-size: 18px; color: var(--text); margin-bottom: 6px; }
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { margin-left: 0; max-width: 100vw; padding: 1rem; }
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .plant-grid { grid-template-columns: 1fr 1fr; }
+  .form-row, .form-row3 { grid-template-columns: 1fr; }
+  .care-action-grid { grid-template-columns: repeat(2, 1fr); }
+  .detail-header { flex-direction: column; }
+  .detail-photo { width: 100%; height: 180px; }
+}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script>
+// =============================================
+// ⚙️  設定: Supabase プロジェクトの値に変更してください
+// =============================================
+const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+// =============================================
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const ICONS = ['🌿','🌵','🌸','🌺','🍀','🌱','🌻','🪴','🌴','🎍','🌾','🪷'];
+const CARE_TYPES = {
+  water:     { icon: '💧', label: '水やり',   color: '#e8f4fd' },
+  fertilize: { icon: '🌿', label: '肥料',     color: '#fdf8ee' },
+  prune:     { icon: '✂️', label: '剪定',     color: '#f0f7f0' },
+  repot:     { icon: '🪴', label: '植え替え', color: '#faf6f0' },
+  photo:     { icon: '📷', label: '写真',     color: '#f5f0fa' },
+  note:      { icon: '📝', label: 'メモ',     color: '#f5f5f5' },
+};
+const NAV = [
+  { id: 'dashboard', icon: '🏠', label: 'ダッシュボード' },
+  { id: 'plants',    icon: '🌿', label: '植物一覧' },
+  { id: 'schedule',  icon: '📅', label: 'スケジュール' },
+  { id: 'history',   icon: '📋', label: '記録・履歴' },
+  { id: 'settings',  icon: '⚙️', label: '設定' },
+];
+
+let appState = {
+  user: null,
+  view: 'dashboard',
+  selectedPlantId: null,
+  plants: [],
+  logs: [],       // all logs for current user
+  loading: false,
+  authTab: 'login',
+  authError: '',
+  authMsg: '',
+  notif: { enabled: false, time: '08:00' },
+};
+
+// ===== HELPERS =====
+const $ = id => document.getElementById(id);
+const today = () => new Date().toISOString().split('T')[0];
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')}`;
+}
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const now = new Date(); now.setHours(0,0,0,0);
+  return Math.ceil((new Date(dateStr) - now) / 86400000);
+}
+function addDays(dateStr, n) {
+  const d = new Date(dateStr); d.setDate(d.getDate() + n);
+  return d.toISOString().split('T')[0];
+}
+function daysLabel(d) {
+  if (d === null) return '—';
+  if (d < 0) return `${Math.abs(d)}日超過`;
+  if (d === 0) return '今日';
+  if (d === 1) return '明日';
+  return `${d}日後`;
+}
+function lastLog(plantId, type) {
+  const logs = appState.logs.filter(l => l.plant_id === plantId && l.type === type);
+  if (!logs.length) return null;
+  return logs.sort((a,b) => b.date.localeCompare(a.date))[0].date;
+}
+function nextDate(plant, type) {
+  const last = lastLog(plant.id, type);
+  const days = { water: plant.water_days, fertilize: plant.fert_days, prune: plant.prune_days, repot: plant.repot_days }[type];
+  if (!last || !days) return null;
+  return addDays(last, days);
+}
+function getWaterStatus(plant) {
+  const d = daysUntil(nextDate(plant, 'water'));
+  if (d === null) return 'ok';
+  if (d < 0) return 'late';
+  if (d === 0) return 'today';
+  if (d <= 2) return 'soon';
+  return 'ok';
+}
+function badgeHTML(status, text) {
+  const cls = { ok:'badge-ok', late:'badge-late', today:'badge-today', soon:'badge-soon' }[status] || 'badge-ok';
+  return `<span class="status-badge ${cls}">${text}</span>`;
+}
+
+// ===== SUPABASE DATA =====
+async function loadData() {
+  if (!appState.user) return;
+  appState.loading = true; render();
+  const [{ data: plants }, { data: logs }] = await Promise.all([
+    sb.from('plants').select('*').order('created_at'),
+    sb.from('care_logs').select('*').order('date', { ascending: false }),
+  ]);
+  appState.plants = plants || [];
+  appState.logs = logs || [];
+  appState.loading = false;
+  render();
+}
+
+async function uploadPhoto(file, folder) {
+  if (!file) return null;
+  const ext = file.name.split('.').pop();
+  const path = `${appState.user.id}/${folder}_${Date.now()}.${ext}`;
+  const { error } = await sb.storage.from('plant-photos').upload(path, file);
+  if (error) return null;
+  const { data } = sb.storage.from('plant-photos').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// ===== AUTH =====
+async function handleLogin() {
+  const email = $('auth-email').value.trim();
+  const pass = $('auth-pass').value;
+  if (!email || !pass) { appState.authError = 'メールアドレスとパスワードを入力してください'; render(); return; }
+  const btn = $('auth-btn'); btn.disabled = true; btn.textContent = '処理中...';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  btn.disabled = false; btn.textContent = 'ログイン';
+  if (error) { appState.authError = error.message; render(); }
+}
+async function handleSignup() {
+  const email = $('auth-email').value.trim();
+  const pass = $('auth-pass').value;
+  if (!email || !pass) { appState.authError = 'メールアドレスとパスワードを入力してください'; render(); return; }
+  if (pass.length < 6) { appState.authError = 'パスワードは6文字以上にしてください'; render(); return; }
+  const btn = $('auth-btn'); btn.disabled = true; btn.textContent = '処理中...';
+  const { error } = await sb.auth.signUp({ email, password: pass });
+  btn.disabled = false; btn.textContent = '新規登録';
+  if (error) { appState.authError = error.message; render(); }
+  else { appState.authMsg = '確認メールを送信しました。メールのリンクをクリックしてください。'; appState.authError = ''; render(); }
+}
+async function handleLogout() {
+  await sb.auth.signOut();
+  appState.user = null; appState.plants = []; appState.logs = [];
+  render();
+}
+
+// ===== ACTIONS =====
+async function savePlant(editId) {
+  const name = $('f-name').value.trim();
+  if (!name) { alert('名前を入力してください'); return; }
+  const btn = $('f-save-btn'); btn.disabled = true; btn.textContent = '保存中...';
+  const fileInput = $('f-photo-input');
+  let photo_url = editId ? (appState.plants.find(p=>p.id===editId)||{}).photo_url : null;
+  if (fileInput && fileInput.files[0]) photo_url = await uploadPhoto(fileInput.files[0], 'plant') || photo_url;
+
+  const data = {
+    name, photo_url,
+    species: $('f-species').value,
+    icon: $('f-icon').value,
+    location: $('f-location').value,
+    water_days: parseInt($('f-waterDays').value)||7,
+    fert_days: parseInt($('f-fertDays').value)||0,
+    prune_days: parseInt($('f-pruneDays').value)||0,
+    repot_days: parseInt($('f-repotDays').value)||365,
+    note: $('f-note').value,
+  };
+
+  if (editId) {
+    await sb.from('plants').update(data).eq('id', editId);
+  } else {
+    data.user_id = appState.user.id;
+    await sb.from('plants').insert(data);
+  }
+  closeModal(); await loadData();
+  if (appState.view === 'plant-detail') appState.view = 'plant-detail';
+  render();
+}
+
+async function deletePlant(id) {
+  if (!confirm('この植物を削除しますか？記録もすべて削除されます。')) return;
+  await sb.from('plants').delete().eq('id', id);
+  appState.view = 'plants';
+  await loadData();
+}
+
+async function saveCareLog(plantId) {
+  const btn = $('f-care-save'); btn.disabled = true; btn.textContent = '保存中...';
+  const fileInput = $('f-care-photo');
+  let photo_url = null;
+  if (fileInput && fileInput.files[0]) photo_url = await uploadPhoto(fileInput.files[0], 'care');
+
+  await sb.from('care_logs').insert({
+    plant_id: plantId,
+    user_id: appState.user.id,
+    type: $('f-care-type').value,
+    date: $('f-care-date').value,
+    note: $('f-care-note').value,
+    photo_url,
+  });
+  closeModal(); await loadData();
+}
+
+async function quickWater(plantId) {
+  await sb.from('care_logs').insert({
+    plant_id: plantId, user_id: appState.user.id,
+    type: 'water', date: today(), note: '',
+  });
+  await loadData();
+}
+
+// ===== RENDER =====
+function navigate(view, id) {
+  appState.view = view;
+  if (id !== undefined) appState.selectedPlantId = id;
+  render();
+}
+
+function render() {
+  if (!appState.user) { renderAuth(); return; }
+  const root = $('root');
+  root.innerHTML = `
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="logo">Midori<span>植物ケア管理</span></div>
+      <nav class="nav">${NAV.map(n => `
+        <div class="nav-item ${appState.view===n.id||(appState.view==='plant-detail'&&n.id==='plants')?'active':''}" onclick="navigate('${n.id}')">
+          <span class="nav-icon">${n.icon}</span>${n.label}
+        </div>`).join('')}
+      </nav>
+      <div class="nav-bottom">
+        <div class="user-info">👤 ${appState.user.email}</div>
+        <button class="btn btn-secondary btn-sm" onclick="handleLogout()" style="width:100%">ログアウト</button>
+      </div>
+    </aside>
+    <main class="main">
+      ${appState.loading ? '<div class="loading"><div class="spinner"></div>読み込み中...</div>' : renderView()}
+    </main>
+  </div>
+  <div id="modal-container"></div>`;
+}
+
+function renderAuth() {
+  $('root').innerHTML = `
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">🌿 Midori</div>
+      <div class="auth-tagline">植物ケア管理アプリ</div>
+      <div class="auth-tabs">
+        <button class="auth-tab ${appState.authTab==='login'?'active':''}" onclick="appState.authTab='login';appState.authError='';render()">ログイン</button>
+        <button class="auth-tab ${appState.authTab==='signup'?'active':''}" onclick="appState.authTab='signup';appState.authError='';render()">新規登録</button>
+      </div>
+      <div class="form-group"><label class="form-label">メールアドレス</label><input type="email" id="auth-email" placeholder="you@example.com"></div>
+      <div class="form-group"><label class="form-label">パスワード</label><input type="password" id="auth-pass" placeholder="6文字以上"></div>
+      ${appState.authError ? `<div class="error-msg">${appState.authError}</div>` : ''}
+      ${appState.authMsg ? `<div class="success-msg">${appState.authMsg}</div>` : ''}
+      <button class="btn btn-primary" id="auth-btn" style="width:100%;margin-top:1rem"
+        onclick="${appState.authTab==='login'?'handleLogin()':'handleSignup()'}">
+        ${appState.authTab==='login'?'ログイン':'新規登録'}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderView() {
+  const views = { dashboard: renderDashboard, plants: renderPlants, schedule: renderSchedule, history: renderHistory, settings: renderSettings, 'plant-detail': renderPlantDetail };
+  return (views[appState.view] || renderDashboard)();
+}
+
+// ===== DASHBOARD =====
+function renderDashboard() {
+  const total = appState.plants.length;
+  const late = appState.plants.filter(p=>getWaterStatus(p)==='late').length;
+  const due = appState.plants.filter(p=>['today','soon'].includes(getWaterStatus(p))).length;
+  const todayW = appState.plants.filter(p=>lastLog(p.id,'water')===today()).length;
+  const urgent = appState.plants.filter(p=>['late','today','soon'].includes(getWaterStatus(p)))
+    .sort((a,b)=>(daysUntil(nextDate(a,'water'))||0)-(daysUntil(nextDate(b,'water'))||0));
+  const upcoming = [];
+  appState.plants.forEach(p => ['water','fertilize','prune','repot'].forEach(t => {
+    const nd = nextDate(p,t); if (!nd) return;
+    const d = daysUntil(nd); if (d !== null && d <= 7) upcoming.push({plant:p,type:t,date:nd,days:d});
+  }));
+  upcoming.sort((a,b)=>a.days-b.days);
+  return `
+  <div class="page-header">
+    <div><div class="page-title">ダッシュボード</div><div class="page-subtitle">${fmtDate(today())}</div></div>
+    <button class="btn btn-primary" onclick="openAddPlant()">+ 植物を追加</button>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-label">登録植物</div><div class="stat-value">${total}</div></div>
+    <div class="stat-card"><div class="stat-label">期限超過</div><div class="stat-value red">${late}</div></div>
+    <div class="stat-card"><div class="stat-label">まもなく</div><div class="stat-value amber">${due}</div></div>
+    <div class="stat-card"><div class="stat-label">今日完了</div><div class="stat-value green">${todayW}</div></div>
+  </div>
+  ${late>0?`<div class="alert alert-warn">⚠️ ${late}つの植物が水やり期限を超過しています</div>`:''}
+  ${urgent.length>0?`
+  <div style="margin-bottom:2rem">
+    <div style="font-size:14px;font-weight:500;margin-bottom:1rem">要対応の植物</div>
+    <div class="plant-grid">${urgent.map(p=>plantCardHTML(p)).join('')}</div>
+  </div>`:`<div class="alert alert-info">✅ すべての植物が良好な状態です！</div>`}
+  ${upcoming.length>0?`
+  <div>
+    <div style="font-size:14px;font-weight:500;margin-bottom:1rem">今後7日間のケア予定</div>
+    <div class="timeline">${upcoming.slice(0,8).map(c=>`
+      <div class="timeline-task ${c.days<0?'overdue':''}">
+        <span>${CARE_TYPES[c.type].icon}</span>
+        <div class="timeline-task-info"><div class="timeline-task-name">${c.plant.name}</div><div class="timeline-task-type">${CARE_TYPES[c.type].label}</div></div>
+        <span style="font-size:12px;color:var(--text-muted)">${daysLabel(c.days)}</span>
+        ${c.type==='water'?`<button class="btn btn-sm btn-secondary" onclick="quickWater('${c.plant.id}')">完了</button>`:''}
+      </div>`).join('')}
+    </div>
+  </div>`:''}`;
+}
+
+// ===== PLANTS =====
+function plantCardHTML(p) {
+  const ws = getWaterStatus(p);
+  const wd = daysUntil(nextDate(p,'water'));
+  const bText = wd===null?'未記録':daysLabel(wd);
+  return `<div class="plant-card ${ws}" onclick="navigate('plant-detail','${p.id}')">
+    <div class="plant-photo">
+      ${p.photo_url?`<img src="${p.photo_url}" alt="${p.name}">`:(p.icon||'🌿')}
+      ${badgeHTML(ws,bText)}
+    </div>
+    <div class="plant-body">
+      <div class="plant-name">${p.name}</div>
+      <div class="plant-species">${p.species||'—'}</div>
+      <div class="plant-stats"><span>💧 ${p.water_days}日周期</span>${p.location?`<span>📍 ${p.location}</span>`:''}</div>
+      <div class="plant-actions">
+        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();quickWater('${p.id}')">💧 水やり</button>
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();navigate('plant-detail','${p.id}')">詳細</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderPlants() {
+  return `
+  <div class="page-header">
+    <div><div class="page-title">植物一覧</div><div class="page-subtitle">${appState.plants.length}つの植物を管理中</div></div>
+    <button class="btn btn-primary" onclick="openAddPlant()">+ 植物を追加</button>
+  </div>
+  ${appState.plants.length===0?`<div class="empty"><span class="empty-icon">🌱</span><div class="empty-title">まだ植物が登録されていません</div><br><button class="btn btn-primary" onclick="openAddPlant()">+ 植物を追加</button></div>`
+  :`<div class="plant-grid">${appState.plants.map(p=>plantCardHTML(p)).join('')}</div>`}`;
+}
+
+// ===== PLANT DETAIL =====
+function renderPlantDetail() {
+  const p = appState.plants.find(x=>x.id===appState.selectedPlantId);
+  if (!p) { navigate('plants'); return ''; }
+  const plantLogs = appState.logs.filter(l=>l.plant_id===p.id).sort((a,b)=>b.date.localeCompare(a.date));
+  return `
+  <div style="margin-bottom:1rem"><button class="btn btn-secondary btn-sm" onclick="navigate('plants')">← 戻る</button></div>
+  <div class="detail-header">
+    <div class="detail-photo">${p.photo_url?`<img src="${p.photo_url}" alt="${p.name}">`:(p.icon||'🌿')}</div>
+    <div>
+      <div class="detail-name">${p.name}</div>
+      <div class="detail-species">${p.species||'—'}</div>
+      ${p.note?`<div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">${p.note}</div>`:''}
+      <div class="detail-chips">
+        ${p.location?`<span class="chip">📍 ${p.location}</span>`:''}
+        <span class="chip">💧 ${p.water_days}日ごと</span>
+        ${p.fert_days?`<span class="chip">🌿 肥料 ${p.fert_days}日ごと</span>`:''}
+        ${p.prune_days?`<span class="chip">✂️ 剪定 ${p.prune_days}日ごと</span>`:''}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-secondary btn-sm" onclick="openEditPlant('${p.id}')">✏️ 編集</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePlant('${p.id}')">🗑 削除</button>
+      </div>
+    </div>
+  </div>
+  <div class="care-action-grid">
+    ${Object.entries(CARE_TYPES).map(([type,ct])=>{
+      const nd=nextDate(p,type); const d=nd?daysUntil(nd):null;
+      return `<div class="care-action-btn" onclick="openCareLog('${p.id}','${type}')">
+        <div class="icon">${ct.icon}</div><div class="label">${ct.label}</div>
+        ${d!==null?`<div style="font-size:11px;margin-top:4px;color:${d<=0?'var(--red-400)':'var(--text-light)'}">${daysLabel(d)}</div>`:''}
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-logs" onclick="switchTab('logs')">ケア記録</button>
+    <button class="tab-btn" id="tab-next" onclick="switchTab('next')">次回予定</button>
+  </div>
+  <div id="tab-content-logs">
+    ${plantLogs.length===0?'<div class="empty">まだ記録がありません</div>'
+    :plantLogs.map(l=>{const ct=CARE_TYPES[l.type]||CARE_TYPES.note;return`<div class="care-item">
+      <div class="care-icon" style="background:${ct.color}">${ct.icon}</div>
+      <div class="care-info"><div class="care-title">${ct.label}</div>${l.note?`<div class="care-meta">${l.note}</div>`:''}</div>
+      <div class="care-date">${fmtDate(l.date)}</div>
+    </div>`}).join('')}
+  </div>
+  <div id="tab-content-next" style="display:none">
+    ${['water','fertilize','prune','repot'].map(type=>{
+      const ct=CARE_TYPES[type];
+      const nd=nextDate(p,type); const days=p[{water:'water_days',fertilize:'fert_days',prune:'prune_days',repot:'repot_days'}[type]];
+      if(!days) return '';
+      const d=nd?daysUntil(nd):null;
+      return `<div class="care-item">
+        <div class="care-icon" style="background:${ct.color}">${ct.icon}</div>
+        <div class="care-info"><div class="care-title">${ct.label}</div><div class="care-meta">前回: ${fmtDate(lastLog(p.id,type))} / ${days}日ごと</div></div>
+        <div class="care-date" style="${d!==null&&d<=0?'color:var(--red-400)':''}">${nd?fmtDate(nd):'未記録'}<br>${d!==null?daysLabel(d):''}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function switchTab(tab) {
+  $('tab-logs').classList.toggle('active',tab==='logs');
+  $('tab-next').classList.toggle('active',tab==='next');
+  $('tab-content-logs').style.display=tab==='logs'?'':'none';
+  $('tab-content-next').style.display=tab==='next'?'':'none';
+}
+
+// ===== SCHEDULE =====
+function renderSchedule() {
+  const days={};
+  for(let i=-3;i<=14;i++){const d=new Date();d.setDate(d.getDate()+i);days[d.toISOString().split('T')[0]]=[];}
+  appState.plants.forEach(p=>['water','fertilize','prune','repot'].forEach(t=>{
+    const nd=nextDate(p,t); if(!nd||!days[nd]) return; days[nd].push({plant:p,type:t});
+  }));
+  const dl={'0':'日','1':'月','2':'火','3':'水','4':'木','5':'金','6':'土'};
+  return `
+  <div class="page-header"><div><div class="page-title">スケジュール</div><div class="page-subtitle">今後のケア予定</div></div></div>
+  <div class="timeline">
+    ${Object.entries(days).sort(([a],[b])=>a.localeCompare(b)).map(([date,tasks])=>{
+      const d=new Date(date); const isToday=date===today(); const isPast=date<today();
+      const label=isToday?'今日':`${date.slice(5).replace('-','/')} (${dl[d.getDay()]})`;
+      return `<div class="timeline-day">
+        <div class="timeline-day-label" style="${isToday?'color:var(--green-600);font-weight:600':isPast?'color:var(--text-light)':''}">${label}</div>
+        ${tasks.length===0?`<div style="font-size:13px;color:var(--text-light);padding:4px 0 10px">予定なし</div>`
+        :tasks.map(t=>`<div class="timeline-task ${isPast?'overdue':''}">
+          <span>${CARE_TYPES[t.type].icon}</span>
+          <div class="timeline-task-info"><div class="timeline-task-name">${t.plant.name}</div><div class="timeline-task-type">${CARE_TYPES[t.type].label}</div></div>
+          ${t.type==='water'?`<button class="btn btn-sm btn-secondary" onclick="quickWater('${t.plant.id}')">完了</button>`:''}
+        </div>`).join('')}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ===== HISTORY =====
+function renderHistory() {
+  const all = appState.logs.map(l=>{
+    const p=appState.plants.find(x=>x.id===l.plant_id)||{name:'?',icon:'🌿'};
+    return {...l,plantName:p.name,plantIcon:p.icon};
+  });
+  return `
+  <div class="page-header"><div><div class="page-title">記録・履歴</div><div class="page-subtitle">全植物のケア記録</div></div></div>
+  ${all.length===0?'<div class="empty"><span class="empty-icon">📋</span><div class="empty-title">まだ記録がありません</div></div>'
+  :`<div class="care-list">${all.map(l=>{const ct=CARE_TYPES[l.type]||CARE_TYPES.note;return`
+    <div class="care-item" style="cursor:pointer" onclick="navigate('plant-detail','${l.plant_id}')">
+      <div class="care-icon" style="background:${ct.color}">${ct.icon}</div>
+      <div class="care-info"><div class="care-title">${l.plantIcon} ${l.plantName} — ${ct.label}</div>${l.note?`<div class="care-meta">${l.note}</div>`:''}</div>
+      <div class="care-date">${fmtDate(l.date)}</div>
+    </div>`}).join('')}</div>`}`;
+}
+
+// ===== SETTINGS =====
+function renderSettings() {
+  return `
+  <div class="page-header"><div><div class="page-title">設定</div></div></div>
+  <div style="max-width:480px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem">
+      <div style="font-weight:500;margin-bottom:1rem">アカウント</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">👤 ${appState.user.email}</div>
+      <button class="btn btn-secondary btn-sm" onclick="handleLogout()">ログアウト</button>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem">
+      <div style="font-weight:500;margin-bottom:1rem">データ</div>
+      <div style="font-size:13px;color:var(--text-muted)">
+        ${appState.plants.length}つの植物 / ${appState.logs.length}件の記録
+      </div>
+    </div>
+    <div style="text-align:center;font-size:12px;color:var(--text-light);padding:1rem">Midori — Supabase + Netlify</div>
+  </div>`;
+}
+
+// ===== MODALS =====
+function openModal(html) {
+  const mc = $('modal-container') || document.body.appendChild(Object.assign(document.createElement('div'),{id:'modal-container'}));
+  mc.innerHTML = `<div class="modal-bg" onclick="closeModal(event)">${html}</div>`;
+}
+function closeModal(e) {
+  if (!e || e.target.classList.contains('modal-bg')) {
+    const mc = $('modal-container'); if (mc) mc.innerHTML = '';
+  }
+}
+function selectIcon(btn,icon) {
+  document.querySelectorAll('.icon-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected'); $('f-icon').value = icon;
+}
+function previewPhoto(input, previewId) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { $(previewId).innerHTML = `<img src="${e.target.result}" style="width:100%;height:120px;object-fit:cover;border-radius:8px">`; };
+  reader.readAsDataURL(file);
+}
+
+function plantFormHTML(p) {
+  const icon = p?p.icon:ICONS[0];
+  return `
+  <div class="form-group"><label class="form-label">アイコン</label>
+    <div class="icon-picker">${ICONS.map(ic=>`<button class="icon-btn ${ic===icon?'selected':''}" onclick="selectIcon(this,'${ic}')">${ic}</button>`).join('')}</div>
+    <input type="hidden" id="f-icon" value="${icon}">
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">名前 *</label><input type="text" id="f-name" value="${p?p.name:''}" placeholder="モンステラ"></div>
+    <div class="form-group"><label class="form-label">品種</label><input type="text" id="f-species" value="${p?p.species||'':''}" placeholder="Monstera deliciosa"></div>
+  </div>
+  <div class="form-group"><label class="form-label">置き場所</label><input type="text" id="f-location" value="${p?p.location||'':''}" placeholder="リビング、窓辺..."></div>
+  <div class="form-row3">
+    <div class="form-group"><label class="form-label">水やり（日）</label><input type="number" id="f-waterDays" value="${p?p.water_days:7}" min="1"></div>
+    <div class="form-group"><label class="form-label">肥料（日）</label><input type="number" id="f-fertDays" value="${p?p.fert_days||0:30}" min="0"></div>
+    <div class="form-group"><label class="form-label">剪定（日）</label><input type="number" id="f-pruneDays" value="${p?p.prune_days||0:60}" min="0"></div>
+  </div>
+  <div class="form-group"><label class="form-label">植え替え（日）</label><input type="number" id="f-repotDays" value="${p?p.repot_days||365:365}" min="0" style="width:120px"></div>
+  <div class="form-group"><label class="form-label">写真</label>
+    <div class="photo-upload" onclick="$('f-photo-input').click()">
+      <div id="f-photo-preview">${p&&p.photo_url?`<img src="${p.photo_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px">`:'📷<br><span style="font-size:12px">クリックして写真を選択</span>'}</div>
+      <input type="file" id="f-photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this,'f-photo-preview')">
+    </div>
+  </div>
+  <div class="form-group"><label class="form-label">メモ</label><textarea id="f-note" placeholder="管理のコツなど...">${p?p.note||'':''}</textarea></div>`;
+}
+
+function openAddPlant() {
+  openModal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header"><div class="modal-title">植物を追加</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">${plantFormHTML(null)}</div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" id="f-save-btn" onclick="savePlant(null)">追加する</button>
+    </div>
+  </div>`);
+}
+
+function openEditPlant(id) {
+  const p = appState.plants.find(x=>x.id===id); if(!p) return;
+  openModal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header"><div class="modal-title">植物を編集</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">${plantFormHTML(p)}</div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" id="f-save-btn" onclick="savePlant('${id}')">保存する</button>
+    </div>
+  </div>`);
+}
+
+function openCareLog(plantId, typePreset) {
+  openModal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header"><div class="modal-title">ケア記録を追加</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">種類</label>
+        <select id="f-care-type">${Object.entries(CARE_TYPES).map(([k,v])=>`<option value="${k}" ${k===typePreset?'selected':''}>${v.icon} ${v.label}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label class="form-label">日付</label><input type="date" id="f-care-date" value="${today()}"></div>
+      <div class="form-group"><label class="form-label">写真</label>
+        <div class="photo-upload" onclick="$('f-care-photo').click()">
+          <div id="f-care-photo-preview">📷<br><span style="font-size:12px">クリックして写真を選択</span></div>
+          <input type="file" id="f-care-photo" accept="image/*" style="display:none" onchange="previewPhoto(this,'f-care-photo-preview')">
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">メモ</label><textarea id="f-care-note" placeholder="気づいたこと..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" id="f-care-save" onclick="saveCareLog('${plantId}')">記録する</button>
+    </div>
+  </div>`);
+}
+
+// ===== INIT =====
+sb.auth.onAuthStateChange((event, session) => {
+  appState.user = session?.user || null;
+  if (appState.user) loadData();
+  else render();
+});
+</script>
+</body>
+</html>
