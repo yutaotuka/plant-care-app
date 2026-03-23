@@ -53,3 +53,24 @@ create policy "全員が閲覧可" on storage.objects
 
 create policy "自分のファイルは削除可" on storage.objects
   for delete using (bucket_id = 'plant-photos' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- =============================================
+-- 成長記録テーブルの追加
+-- =============================================
+ 
+create table growth_logs (
+  id uuid default gen_random_uuid() primary key,
+  plant_id uuid references plants(id) on delete cascade not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  date date not null default current_date,
+  height_cm numeric(6,1),
+  note text,
+  photo_url text,
+  created_at timestamptz default now()
+);
+ 
+alter table growth_logs enable row level security;
+ 
+create policy "自分のデータのみ参照" on growth_logs
+  for all using (auth.uid() = user_id);
+ 
