@@ -178,6 +178,43 @@ textarea { resize: vertical; min-height: 70px; }
 .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--green-400); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Growth timeline */
+.growth-timeline { display: flex; flex-direction: column; gap: 0; }
+.growth-entry { display: flex; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
+.growth-entry:last-child { border-bottom: none; }
+.growth-line { display: flex; flex-direction: column; align-items: center; width: 32px; flex-shrink: 0; }
+.growth-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--green-400); border: 2px solid var(--green-200); flex-shrink: 0; margin-top: 4px; }
+.growth-stem { flex: 1; width: 2px; background: var(--border); margin-top: 4px; min-height: 20px; }
+.growth-content { flex: 1; }
+.growth-date { font-size: 12px; color: var(--text-light); margin-bottom: 6px; }
+.growth-photo { width: 100%; max-width: 320px; border-radius: var(--radius-sm); margin-bottom: 8px; object-fit: cover; cursor: pointer; transition: opacity 0.15s; }
+.growth-photo:hover { opacity: 0.9; }
+.growth-note { font-size: 13px; color: var(--text); line-height: 1.6; }
+.growth-height { display: inline-block; font-size: 12px; padding: 2px 10px; border-radius: 20px; background: var(--green-50); color: var(--green-600); border: 1px solid var(--green-100); margin-bottom: 6px; }
+
+/* Photo lightbox */
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 2000; cursor: pointer; }
+.lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--radius-sm); object-fit: contain; }
+
+/* Calendar */
+.cal-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 1rem; box-shadow: var(--shadow); }
+.cal-nav { display: flex; align-items: center; gap: 12px; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+.cal-grid-header { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--border); }
+.cal-dow { text-align: center; padding: 8px 0; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-cell { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px; min-height: 72px; cursor: pointer; transition: background 0.1s; }
+.cal-cell:nth-child(7n) { border-right: none; }
+.cal-cell:hover { background: var(--surface-2); }
+.cal-cell.cal-empty { cursor: default; background: var(--surface-2); opacity: 0.5; }
+.cal-cell.cal-today { background: var(--green-50); }
+.cal-cell.cal-today .cal-num { background: var(--green-600); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+.cal-cell.cal-late { background: #fff8f8; }
+.cal-num { font-size: 13px; font-weight: 500; margin-bottom: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+.cal-tasks { display: flex; flex-wrap: wrap; gap: 2px; }
+.cal-dot { font-size: 12px; line-height: 1; }
+.cal-more { font-size: 10px; color: var(--text-muted); align-self: center; }
+.cal-detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+
 .empty { text-align: center; padding: 3rem; color: var(--text-muted); }
 .empty-icon { font-size: 48px; margin-bottom: 1rem; display: block; }
 .empty-title { font-family: 'Shippori Mincho', serif; font-size: 18px; color: var(--text); margin-bottom: 6px; }
@@ -231,7 +268,8 @@ let appState = {
   view: 'dashboard',
   selectedPlantId: null,
   plants: [],
-  logs: [],       // all logs for current user
+  logs: [],
+  growthLogs: [],
   loading: false,
   authTab: 'login',
   authError: '',
@@ -291,12 +329,14 @@ function badgeHTML(status, text) {
 async function loadData() {
   if (!appState.user) return;
   appState.loading = true; render();
-  const [{ data: plants }, { data: logs }] = await Promise.all([
+  const [{ data: plants }, { data: logs }, { data: growthLogs }] = await Promise.all([
     sb.from('plants').select('*').order('created_at'),
     sb.from('care_logs').select('*').order('date', { ascending: false }),
+    sb.from('growth_logs').select('*').order('date', { ascending: false }),
   ]);
   appState.plants = plants || [];
   appState.logs = logs || [];
+  appState.growthLogs = growthLogs || [];
   appState.loading = false;
   render();
 }
@@ -334,7 +374,7 @@ async function handleSignup() {
 }
 async function handleLogout() {
   await sb.auth.signOut();
-  appState.user = null; appState.plants = []; appState.logs = [];
+  appState.user = null; appState.plants = []; appState.logs = []; appState.growthLogs = [];
   render();
 }
 
@@ -375,6 +415,54 @@ async function deletePlant(id) {
   await sb.from('plants').delete().eq('id', id);
   appState.view = 'plants';
   await loadData();
+}
+
+async function saveGrowthLog(plantId) {
+  const btn = $('f-growth-save'); btn.disabled = true; btn.textContent = '保存中...';
+  const fileInput = $('f-growth-photo');
+  let photo_url = null;
+  if (fileInput && fileInput.files[0]) photo_url = await uploadPhoto(fileInput.files[0], 'growth');
+  const height = $('f-growth-height').value;
+  await sb.from('growth_logs').insert({
+    plant_id: plantId,
+    user_id: appState.user.id,
+    date: $('f-growth-date').value,
+    height_cm: height ? parseFloat(height) : null,
+    note: $('f-growth-note').value,
+    photo_url,
+  });
+  closeModal();
+  await loadData();
+  // stay on growth tab after reload
+  setTimeout(() => switchTab('growth'), 50);
+}
+
+async function deleteGrowthLog(id) {
+  if (!confirm('この成長記録を削除しますか？')) return;
+  await sb.from('growth_logs').delete().eq('id', id);
+  await loadData();
+  setTimeout(() => switchTab('growth'), 50);
+}
+
+function openAddGrowth(plantId) {
+  openModal(`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header"><div class="modal-title">成長記録を追加</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">日付</label><input type="date" id="f-growth-date" value="${today()}"></div>
+      <div class="form-group"><label class="form-label">草丈・高さ（cm）</label><input type="number" id="f-growth-height" placeholder="例: 25.5" step="0.1" min="0" style="width:140px"></div>
+      <div class="form-group"><label class="form-label">写真</label>
+        <div class="photo-upload" onclick="$('f-growth-photo').click()">
+          <div id="f-growth-photo-preview">📷<br><span style="font-size:12px">クリックして写真を選択</span></div>
+          <input type="file" id="f-growth-photo" accept="image/*" style="display:none" onchange="previewPhoto(this,'f-growth-photo-preview')">
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">メモ</label><textarea id="f-growth-note" placeholder="新芽が出た、葉が増えたなど..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" id="f-growth-save" onclick="saveGrowthLog('${plantId}')">記録する</button>
+    </div>
+  </div>`);
 }
 
 async function saveCareLog(plantId) {
@@ -574,6 +662,7 @@ function renderPlantDetail() {
   <div class="tabs">
     <button class="tab-btn active" id="tab-logs" onclick="switchTab('logs')">ケア記録</button>
     <button class="tab-btn" id="tab-next" onclick="switchTab('next')">次回予定</button>
+    <button class="tab-btn" id="tab-growth" onclick="switchTab('growth')">成長記録</button>
   </div>
   <div id="tab-content-logs">
     ${plantLogs.length===0?'<div class="empty">まだ記録がありません</div>'
@@ -595,41 +684,139 @@ function renderPlantDetail() {
         <div class="care-date" style="${d!==null&&d<=0?'color:var(--red-400)':''}">${nd?fmtDate(nd):'未記録'}<br>${d!==null?daysLabel(d):''}</div>
       </div>`;
     }).join('')}
+  </div>
+  <div id="tab-content-growth" style="display:none">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
+      <button class="btn btn-primary btn-sm" onclick="openAddGrowth('${p.id}')">+ 成長記録を追加</button>
+    </div>
+    ${renderGrowthTimeline(p.id)}
   </div>`;
 }
 
 function switchTab(tab) {
-  $('tab-logs').classList.toggle('active',tab==='logs');
-  $('tab-next').classList.toggle('active',tab==='next');
-  $('tab-content-logs').style.display=tab==='logs'?'':'none';
-  $('tab-content-next').style.display=tab==='next'?'':'none';
+  ['logs','next','growth'].forEach(t => {
+    const btn = $('tab-'+t); const content = $('tab-content-'+t);
+    if (btn) btn.classList.toggle('active', t===tab);
+    if (content) content.style.display = t===tab ? '' : 'none';
+  });
 }
 
-// ===== SCHEDULE =====
+function renderGrowthTimeline(plantId) {
+  const entries = appState.growthLogs.filter(g=>g.plant_id===plantId).sort((a,b)=>b.date.localeCompare(a.date));
+  if (!entries.length) return `<div class="empty" style="padding:2rem 0">まだ成長記録がありません<br><span style="font-size:13px">写真や身長を記録して成長を振り返りましょう</span></div>`;
+  return `<div class="growth-timeline">${entries.map((g,i)=>`
+    <div class="growth-entry">
+      <div class="growth-line">
+        <div class="growth-dot"></div>
+        ${i < entries.length-1 ? '<div class="growth-stem"></div>' : ''}
+      </div>
+      <div class="growth-content">
+        <div class="growth-date">${fmtDate(g.date)}</div>
+        ${g.height_cm ? `<div class="growth-height">📏 ${g.height_cm} cm</div>` : ''}
+        ${g.photo_url ? `<img class="growth-photo" src="${g.photo_url}" onclick="openLightbox('${g.photo_url}')" loading="lazy">` : ''}
+        ${g.note ? `<div class="growth-note">${g.note}</div>` : ''}
+        <button style="margin-top:8px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-light)" onclick="deleteGrowthLog('${g.id}')">🗑 削除</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function openLightbox(url) {
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<img src="${url}">`;
+  lb.onclick = () => lb.remove();
+  document.body.appendChild(lb);
+}
+
+// ===== SCHEDULE (CALENDAR) =====
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-indexed
+
 function renderSchedule() {
-  const days={};
-  for(let i=-3;i<=14;i++){const d=new Date();d.setDate(d.getDate()+i);days[d.toISOString().split('T')[0]]=[];}
-  appState.plants.forEach(p=>['water','fertilize','prune','repot'].forEach(t=>{
-    const nd=nextDate(p,t); if(!nd||!days[nd]) return; days[nd].push({plant:p,type:t});
+  // Build task map for the entire displayed month (+prev/next padding)
+  const taskMap = {};
+  appState.plants.forEach(p => ['water','fertilize','prune','repot'].forEach(t => {
+    const nd = nextDate(p, t); if (!nd) return;
+    if (!taskMap[nd]) taskMap[nd] = [];
+    taskMap[nd].push({ plant: p, type: t });
   }));
-  const dl={'0':'日','1':'月','2':'火','3':'水','4':'木','5':'金','6':'土'};
+
+  const firstDay = new Date(calYear, calMonth, 1);
+  const lastDay  = new Date(calYear, calMonth + 1, 0);
+  const startDow = firstDay.getDay(); // 0=Sun
+  const daysInMonth = lastDay.getDate();
+  const todayStr = today();
+  const DOW = ['日','月','火','水','木','金','土'];
+  const monthLabel = `${calYear}年${calMonth+1}月`;
+
+  // Build calendar cells
+  let cells = '';
+  // Empty cells before first day
+  for (let i = 0; i < startDow; i++) cells += `<div class="cal-cell cal-empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const tasks = taskMap[dateStr] || [];
+    const isToday = dateStr === todayStr;
+    const isPast = dateStr < todayStr;
+    const hasLate = isPast && tasks.length > 0;
+    const isSun = new Date(dateStr).getDay() === 0;
+    const isSat = new Date(dateStr).getDay() === 6;
+    cells += `<div class="cal-cell ${isToday?'cal-today':''} ${hasLate?'cal-late':''}" onclick="calDayClick('${dateStr}')">
+      <div class="cal-num" style="${isSun?'color:var(--red-400)':isSat?'color:var(--blue-400,#5a8fd4)':''}">${d}</div>
+      <div class="cal-tasks">
+        ${tasks.slice(0,3).map(t=>`<div class="cal-dot" style="background:${careColor(t.type)}" title="${t.plant.name} ${CARE_TYPES[t.type].label}">${CARE_TYPES[t.type].icon}</div>`).join('')}
+        ${tasks.length>3?`<div class="cal-more">+${tasks.length-3}</div>`:''}
+      </div>
+    </div>`;
+  }
+
+  // Selected day detail
+  const sel = appState.calSelectedDate;
+  const selTasks = sel ? (taskMap[sel] || []) : [];
+
   return `
-  <div class="page-header"><div><div class="page-title">スケジュール</div><div class="page-subtitle">今後のケア予定</div></div></div>
-  <div class="timeline">
-    ${Object.entries(days).sort(([a],[b])=>a.localeCompare(b)).map(([date,tasks])=>{
-      const d=new Date(date); const isToday=date===today(); const isPast=date<today();
-      const label=isToday?'今日':`${date.slice(5).replace('-','/')} (${dl[d.getDay()]})`;
-      return `<div class="timeline-day">
-        <div class="timeline-day-label" style="${isToday?'color:var(--green-600);font-weight:600':isPast?'color:var(--text-light)':''}">${label}</div>
-        ${tasks.length===0?`<div style="font-size:13px;color:var(--text-light);padding:4px 0 10px">予定なし</div>`
-        :tasks.map(t=>`<div class="timeline-task ${isPast?'overdue':''}">
-          <span>${CARE_TYPES[t.type].icon}</span>
+  <div class="page-header">
+    <div><div class="page-title">スケジュール</div><div class="page-subtitle">ケアカレンダー</div></div>
+  </div>
+  <div class="cal-wrap">
+    <div class="cal-nav">
+      <button class="btn btn-secondary btn-sm" onclick="calPrev()">＜</button>
+      <span style="font-size:16px;font-weight:500;font-family:'Shippori Mincho',serif">${monthLabel}</span>
+      <button class="btn btn-secondary btn-sm" onclick="calNext()">＞</button>
+      <button class="btn btn-secondary btn-sm" onclick="calToday()" style="margin-left:8px">今月</button>
+    </div>
+    <div class="cal-grid-header">
+      ${DOW.map((d,i)=>`<div class="cal-dow" style="${i===0?'color:var(--red-400)':i===6?'color:var(--blue-400,#5a8fd4)':''}">${d}</div>`).join('')}
+    </div>
+    <div class="cal-grid">${cells}</div>
+  </div>
+  ${sel ? `
+  <div class="cal-detail">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:500">${fmtDate(sel)} のケア予定</div>
+      <button style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-muted)" onclick="appState.calSelectedDate=null;renderScheduleInPlace()">✕</button>
+    </div>
+    ${selTasks.length===0
+      ? `<div style="font-size:13px;color:var(--text-muted)">この日の予定はありません</div>`
+      : selTasks.map(t=>`<div class="timeline-task" style="margin-bottom:6px">
+          <span style="font-size:18px">${CARE_TYPES[t.type].icon}</span>
           <div class="timeline-task-info"><div class="timeline-task-name">${t.plant.name}</div><div class="timeline-task-type">${CARE_TYPES[t.type].label}</div></div>
           ${t.type==='water'?`<button class="btn btn-sm btn-secondary" onclick="quickWater('${t.plant.id}')">完了</button>`:''}
         </div>`).join('')}
-      </div>`;
-    }).join('')}
-  </div>`;
+  </div>` : ''}`;
+}
+
+function careColor(type) {
+  return { water:'#5aab69', fertilize:'#d4a017', prune:'#2e7d3e', repot:'#a0785a' }[type] || '#888';
+}
+function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} appState.calSelectedDate=null; renderScheduleInPlace(); }
+function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} appState.calSelectedDate=null; renderScheduleInPlace(); }
+function calToday() { calYear=new Date().getFullYear(); calMonth=new Date().getMonth(); appState.calSelectedDate=null; renderScheduleInPlace(); }
+function calDayClick(dateStr) { appState.calSelectedDate = appState.calSelectedDate===dateStr ? null : dateStr; renderScheduleInPlace(); }
+function renderScheduleInPlace() {
+  const main = document.querySelector('.main');
+  if (main) main.innerHTML = renderSchedule();
 }
 
 // ===== HISTORY =====
