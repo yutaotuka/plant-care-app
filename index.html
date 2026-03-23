@@ -332,20 +332,6 @@ async function handleSignup() {
   if (error) { appState.authError = error.message; render(); }
   else { appState.authMsg = '確認メールを送信しました。メールのリンクをクリックしてください。'; appState.authError = ''; render(); }
 }
-async function handleTestLogin() {
-  appState.authError = '';
-  const btns = document.querySelectorAll('.btn');
-  btns.forEach(b => b.disabled = true);
-  const { error } = await sb.auth.signInWithPassword({
-    email: 'test@midori.app',
-    password: 'test1234',
-  });
-  btns.forEach(b => b.disabled = false);
-  if (error) {
-    appState.authError = 'テストログインに失敗しました。Supabaseでテストユーザーを作成してください（test@midori.app / test1234）';
-    render();
-  }
-}
 async function handleLogout() {
   await sb.auth.signOut();
   appState.user = null; appState.plants = []; appState.logs = [];
@@ -464,14 +450,6 @@ function renderAuth() {
       <button class="btn btn-primary" id="auth-btn" style="width:100%;margin-top:1rem"
         onclick="${appState.authTab==='login'?'handleLogin()':'handleSignup()'}">
         ${appState.authTab==='login'?'ログイン':'新規登録'}
-      </button>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:1rem">
-        <div style="flex:1;height:1px;background:var(--border)"></div>
-        <span style="font-size:12px;color:var(--text-light)">または</span>
-        <div style="flex:1;height:1px;background:var(--border)"></div>
-      </div>
-      <button class="btn btn-secondary" style="width:100%;margin-top:1rem;display:flex;align-items:center;justify-content:center;gap:8px" onclick="handleTestLogin()">
-        🧪 テストアカウントでログイン
       </button>
     </div>
   </div>`;
